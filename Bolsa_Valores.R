@@ -61,7 +61,7 @@ ui <- dashboardPage(
       title = "Enter Stock Code", width = 2, solidHeader = TRUE, status = "primary",
       selectInput("StockName", "Stock", stock_ticker, width = "100%"),
       dateRangeInput("DateRange", label= "Date Range:", start ="2005-01-01", end = "2015-01-01"),
-      actionButton("Start", "Go"),
+      actionButton("Start", "Go")
     ),
     box(
       title = "Graph Adjustment", width = 10, solidHeader = TRUE, status = "primary",
@@ -70,8 +70,8 @@ ui <- dashboardPage(
                    choices = c("Close with Volume" = "Line_Volume",
                                "Candle Chart" = "Candle",
                                "Log Returns Normal" = "LogReturns",
-                               "Monte Carlo", "Monte"), 
-                   selected = "Close with Volume")
+                               "Monte Carlo" = "Monte"), 
+                   selected = "Candle")
       # Poner checkBoxes y demás para customizar el gráfico.
     )
     
@@ -79,7 +79,7 @@ ui <- dashboardPage(
   fluidRow(
     box(
       title = "Indicators", width = 2, solidHeader = TRUE, status = "primary",
-      tableOutput(output = "Indicators")
+      tableOutput(outputId = "Indicators")
     ),
     box(
       title = "Charts", solidHeader = TRUE, status = "primary", width = 10,
@@ -90,7 +90,7 @@ ui <- dashboardPage(
 )
 
 #### SERVIDOR APP ####
-server <- shinyServer (function(input, output, session) ({
+server <- shinyServer (function(input, output, session) {
   filterDat_dt <- reactive({
     stock_dt[,-1] %>% filter((stock_dt$Stock_Ticker == as.character(input$StockName)) &
                           (stock_dt$Date >= min(input$DateRange) & stock_dt$Date <= max(input$DateRange)))
@@ -106,33 +106,79 @@ server <- shinyServer (function(input, output, session) ({
   BBBW <- reactive({bbData()$up - bbData()$dn}) #Calculo de indicador de riesgo BBBW.
   
   # Calcular retornos y ver si tienen una funcionalidad distribucion normal.
-  # Candle <- reactive({allData()[,c(1:4,6:8)]})
-  # dailyROR <- reactive({dailyReturn(Candle()$Close, type = "log")})
+  Candle <- reactive({allData()[,c(1:4,6:8)]})
+  dailyROR <- reactive({dailyReturn(Candle()$Close, type = "log")})
   
   drawChart <- eventReactive(input$Start,{
-    # if(input$Options == "Line_Volume"){
-    #   dataset <- reactive({allData()[,c(1:5)]})
-    #   output$History <- renderDygraph({
-    #     dygraph(allData()[,4])
-    #   })
-    # }else 
-      if(input$Options == "Candle"){
+    if(input$Options == "Line_Volume"){
+      dataset <- reactive({allData()[,c(1:5)]})
+      
+      output$History <- renderDygraph({
+        dygraph(dataset()[,4])
+      })
+      
+    }else if(input$Options == "Candle"){
       Candle <- reactive({allData()[,c(1:4,6:8)]})
       output$History <- renderDygraph({
-        p1 <- dygraph(Candle(), main = paste("Stock: ", toupper(input$StockName))) %>% dyCandlestick() %>%
-          dySeries("dn", strokeWidth = 2, strokePattern = "dashed", color = "darkgreen") %>%
-          dySeries("up", strokeWidth = 2, strokePattern = "dashed", color = "darkgreen") %>%
-          dySeries("mavg", strokeWidth = 1.5, color = "red") %>%
-          dyRangeSelector()
+      p1 <- dygraph(Candle(), main = paste("Stock: ", toupper(input$StockName))) %>% dyCandlestick() %>%
+        dySeries("dn", strokeWidth = 2, strokePattern = "dashed", color = "darkgreen") %>%
+        dySeries("up", strokeWidth = 2, strokePattern = "dashed", color = "darkgreen") %>%
+        dySeries("mavg", strokeWidth = 1.5, color = "red") %>%
+        dyRangeSelector()
+      })
+    }else if(input$Options == "LogReturns"){
+      Candle <- reactive({allData()[,c(1:4,6:8)]})
+      dailyROR <- reactive({dailyReturn(Candle()$Close, type = "log")})
+      output$History <- renderPlot({
+        dailyROR() %>%
+          ggplot(aes(x = daily.returns)) +
+          geom_histogram(bins = 100) +
+          geom_density() +
+          title("Normality of Log Returns") +
+          geom_rug(alpha = 0.5)
+      })
+    }else if(input$Options == "Monte"){
+      Candle <- reactive({allData()[,c(1:4,6:8)]})
+      mean_log_returns <- reactive({mean(dailyROR, na.rm = TRUE)})
+      sd_log_returns <- reactive({sd(dailyROR, na.rm = TRUE)})
+
+      N     <- 252 # Number of Stock Price Simulations (Will be an input)
+      M     <- 250  # Number of Monte Carlo Simulations (Will be an input)
+      mu    <- reactive({mean_log_returns})
+      sigma <- reactive({sd_log_returns})
+      day <- reactive({1:N})
+      price_init <- reactive({Candle()$Close[[nrow(Candle()$Close)]]})
+      # Simulate prices
+      set.seed(123)
+      monte_carlo_mat <- reactive({matrix(nrow = N, ncol = M)})
+      for (jj in 1:M) {
+        monte_carlo_mat()[[1, jj]] <- price_init
+        for(ii in 2:N) {
+          monte_carlo_mat()[[ii, jj]] <- monte_carlo_mat()[[ii - 1, jj]] * exp(rnorm(1, mu(), sigma()))
+        }
+      }
+      # Format and organize data frame
+      price_sim <- reactive({cbind(day, monte_carlo_mat) %>%
+        as_tibble()
+        })
+      nm <- reactive({str_c("Sim.", seq(1, M))})
+      nm <- reactive({c("Day", nm)})
+      # names(price_sim) <- nm
+      price_sim <- reactive({price_sim %>%
+        gather(key = "Simulation", value = "Stock.Price", -(Day))
+        })
+      # Visualize simulation
+      output$History <- renderPlot({
+      price_sim %>%
+        ggplot(aes(x = Day, y = Stock.Price, Group = Simulation)) +
+        geom_line(alpha = 0.1) +
+        ggtitle(paste(input$StockName,": ", M,
+                      " Monte Carlo Simulations for Prices Over ", N,
+                      " Trading Days"))
       })
     }
     })
-     
 
-  # Value <- reactive({data.frame(cbind("ROR",ROR()))})
-  # Indicators_df()[1,2] <- reactive({ROR()})
-  # Indicators_df()[2,2] <- reactive({BBBW()})
-  
   output$Indicators <- renderTable(
    ROR()
   )
@@ -155,7 +201,7 @@ server <- shinyServer (function(input, output, session) ({
   #     dyRangeSelector()
   # })
 })
-)
+
   #### RUN APP ####
 shinyApp(ui = ui, server = server)
 

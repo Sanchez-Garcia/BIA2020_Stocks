@@ -8,7 +8,7 @@ stock_dt[,2] <- as.Date(stock_dt$Date, "%Y-%m-%d")
 stock_dt$Volume <- as.double(stock_dt$Volume)
 stock_dt <- stock_dt[,-8]
 
-aa <- "amzn"
+aa <- "aapl"
 
 Date1 <- as.Date("2007-01-01")
 Date2 <- as.Date("2016-10-23")
@@ -75,9 +75,15 @@ price_sim <- price_sim %>%
 price_sim %>%
   ggplot(aes(x = Day, y = Stock.Price, Group = Simulation)) + 
   geom_line(alpha = 0.1) +
-  ggtitle(str_c("MA: ", M, 
+  ggtitle(str_c("AAPL: ", M, 
                 " Monte Carlo Simulations for Prices Over ", N, 
                 " Trading Days"))
+
+end_stock_prices <- price_sim %>% 
+  filter(Day == max(Day))
+probs <- c(.005, .025, .25, .5, .75, .975, .995)
+dist_end_stock_prices <- quantile(end_stock_prices$Stock.Price, probs = probs)
+dist_end_stock_prices %>% round(2)
 
 # 
 # What can you say about the relationship between the standard deviation and mean of the log returns?
@@ -107,13 +113,15 @@ names(CorStocks)<- c("Date","AMZN","MSFT","AAPL","NFLX","XOM")
 correlation <- CorStocks %>% select(-Date) %>% cor()
 
 correlation %>%  corrplot(order   = "hclust", addrect = 11)
+AAPLData$Color <- AAPLData$Close - AAPLData$Open 
 
 f1 <- ggplot(AAPLData, aes(Date,Close)) + scale_colour_identity() + geom_line(color = "blue") +
+  ggtitle("AAPL") +
   theme_minimal()
 f1
 
 f2 <- ggplot(AAPLData) +
-  geom_bar(stat="identity", aes(Date, Volume, fill = ifelse(as.numeric(Color) < 0, "red", "green")),
+  geom_bar(stat="identity", aes(Date, Volume, fill = ifelse(as.numeric(Color) < 0, "darkred", "darkgreen")),
            show.legend = FALSE) +
   theme_minimal()
 f <- grid.arrange(f1, f2, ncol = 1, heights = c(3, 1.5))
