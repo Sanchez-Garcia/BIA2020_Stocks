@@ -8,23 +8,25 @@ stock_dt[,2] <- as.Date(stock_dt$Date, "%Y-%m-%d")
 stock_dt$Volume <- as.double(stock_dt$Volume)
 stock_dt <- stock_dt[,-8]
 
-aa <- "aapl"
+ST <- "aapl"
+nbb <- 20
+nrsi <- 14
 
 Date1 <- as.Date("2007-01-01")
 Date2 <- as.Date("2016-10-23")
 
-AMZNData <- stock_dt[,-1] %>% filter((stock_dt$Stock_Ticker == aa) &
+AMZNData <- stock_dt[,-1] %>% filter((stock_dt$Stock_Ticker == ST) &
                                        (stock_dt$Date >= Date1 & stock_dt$Date <= Date2))
 
-AMZNxts <- xts(x = AMZNData[,-1], order.by = AMZNData$Date)
+AMZNxts <- xts(x = AMZNData[,-1], order.by = AMZNData$Date) 
 
-bbData <- BBands(AMZNxts[,4], sd=2.0, n=20, maType=SMA) #Calculo de la Bollinger Bands
-rsiData <- RSI(AMZNxts[,4], n=14) #Calculo del RSI
+bbData <- BBands(AMZNxts[,4], sd=2.0, n=nbb, maType=SMA) #Calculo de la Bollinger Bands
+rsiData <- RSI(AMZNxts[,4], n=nrsi) #Calculo del RSI
 allData <- cbind(AMZNxts,bbData,rsiData) #Se quiere juntar todo en un XTS.
 names(allData)
 Candle <- allData[,c(1:4,6:8)]
 
-p1 <- dygraph(Candle, main = paste("Stock: ", toupper(aa))) %>% dyCandlestick() %>%
+p1 <- dygraph(Candle, main = paste("Stock: ", toupper(ST))) %>% dyCandlestick() %>%
   dySeries("dn", strokeWidth = 2, strokePattern = "dashed", color = "darkgreen") %>%
   dySeries("up", strokeWidth = 2, strokePattern = "dashed", color = "darkgreen") %>%
   dySeries("mavg", strokeWidth = 1.5, color = "red") 
@@ -32,6 +34,7 @@ p1
 
 dailyROR <- dailyReturn(Candle$Close, type = "log")
 names(dailyROR) <- "MA.Log.Returns"
+head(dailyROR)
 # Plot the log-returns    
 dailyROR %>%    
   ggplot(aes(x = MA.Log.Returns)) + 
